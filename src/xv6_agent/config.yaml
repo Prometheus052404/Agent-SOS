@@ -1,0 +1,299 @@
+# Xv6 Sidecar Agent Configuration
+# Version: 1.0.0
+
+agent:
+  name: "Xv6 Sidecar Sentinel"
+  version: "1.0.0"
+  debug_mode: false
+
+# File Monitoring
+file_sentinel:
+  watch_paths:
+    - "*.c"
+    - "*.h"
+  ignore_patterns:
+    - "*.swp"
+    - "*.tmp"
+    - "*.swx"
+    - "*~"
+    - ".git/*"
+    - ".xv6_agent/*"
+  debounce_ms: 200
+  reconciliation_interval_sec: 30
+
+# Code Property Graph
+cpg:
+  parser: "tree-sitter"
+  cache_dir: ".xv6_agent/cpg_cache"
+  max_cache_size_mb: 100
+  incremental_update: true
+  rebuild_threshold_changes: 50
+
+  graph_config:
+    include_ast: true
+    include_cfg: true
+    include_pdg: true
+    include_call_graph: true
+    max_node_distance: 4
+
+# Vector Store
+vector_store:
+  engine: "chromadb"
+  persist_dir: ".xv6_agent/chroma_db"
+  embedding_model: "all-MiniLM-L6-v2"
+  chunk_size: 500
+  chunk_overlap: 100
+
+  sources:
+    - path: "docs/xv6-riscv-book.pdf"
+      weight: 1.0
+      topics: ["all"]
+    - path: "docs/ostep-concurrency.pdf"
+      weight: 0.8
+      topics: ["locks", "threads", "sync"]
+    - path: "*.c"
+      weight: 0.6
+      topics: ["code_comments"]
+      extract: "comments_only"
+
+# LLM Integration
+llm:
+  provider: "groq"  # Options: openai, anthropic, groq
+  model: "llama-3.3-70b-versatile"  # Or gpt-4o, claude-3-5-sonnet-20241022
+  api_key_env: "GROQ_API_KEY"  # Or OPENAI_API_KEY, ANTHROPIC_API_KEY
+
+  generation_params:
+    temperature: 0.3
+    max_tokens: 800
+    top_p: 0.9
+    frequency_penalty: 0.2
+
+  timeout_sec: 30
+  retry_attempts: 3
+  retry_delay_sec: 2
+
+  fallback_templates:
+    enabled: true
+    cache_size: 10
+    template_dir: ".xv6_agent/templates"
+
+# Context Assembly
+context_assembler:
+  max_tokens: 3000
+
+  token_allocation:
+    system_prompt: 500
+    error_context: 700
+    code_context: 1200
+    textbook_chunks: 600
+
+  code_context_strategy:
+    ranking: "data_flow_priority"
+    max_distance: 2
+    include_callers: true
+    include_callees: true
+    context_lines: 2
+
+  vector_search:
+    top_k: 3
+    min_similarity: 0.5
+    rerank: true
+
+# Pedagogical Validator
+pedagogical_validator:
+  enabled: true
+
+  checks:
+    code_reveal:
+      enabled: true
+      max_code_lines: 5
+      reject_on_fail: true
+
+    progressive_disclosure:
+      enabled: true
+      check_expertise_level: true
+      forbidden_phrases:
+        - "the answer is"
+        - "exactly"
+        - "specifically do this"
+        - "change line"
+        - "add this code"
+        - "replace with"
+
+    principle_ratio:
+      enabled: true
+      min_ratio: 2.0
+      principle_markers:
+        - "because"
+        - "the reason"
+        - "consider what happens"
+        - "the kernel needs"
+        - "this is important"
+        - "the invariant"
+      fix_markers:
+        - "change line"
+        - "add this code"
+        - "replace with"
+        - "modify to"
+
+    invariant_check:
+      enabled: true
+      warn_on_dangerous_patterns: true
+      patterns:
+        - regex: "sleep.*holding.*lock"
+          warning: "Never sleep while holding spinlock"
+        - regex: "acquire.*acquire"
+          warning: "Potential double-acquire deadlock"
+
+  confidence_scoring:
+    enabled: true
+    method: "meta_prompt"
+    min_confidence: 0.5
+
+# FSM Task Tracker
+task_tracker:
+  auto_detect_lab: true
+  base_confidence_threshold: 0.7
+
+  # Adaptive thresholds by state type
+  state_multipliers:
+    IMPLEMENTING: 0.8   # 0.7 * 0.8 = 0.56
+    TESTING: 1.0        # 0.7 * 1.0 = 0.70
+    VALIDATION: 1.2     # 0.7 * 1.2 = 0.84
+
+  labs:
+    lock:
+      states:
+        - NOT_STARTED
+        - IMPLEMENTING_ACQUIRE
+        - TESTING_ACQUIRE
+        - IMPLEMENTING_RELEASE
+        - TESTING_RELEASE
+        - IMPLEMENTING_SLEEP_LOCK
+        - TESTING_SLEEP_LOCK
+        - VALIDATION
+        - COMPLETED
+      file_signatures:
+        - "spinlock.c"
+        - "sleeplock.c"
+        - "proc.c"
+
+    thread:
+      states:
+        - NOT_STARTED
+        - IMPLEMENTING_THREAD_CREATE
+        - IMPLEMENTING_THREAD_SWITCH
+        - TESTING_CONTEXT_SWITCH
+        - IMPLEMENTING_SCHEDULER
+        - VALIDATION
+        - COMPLETED
+      file_signatures:
+        - "proc.c"
+        - "swtch.S"
+
+    fs:
+      states:
+        - NOT_STARTED
+        - IMPLEMENTING_INODE_ALLOC
+        - IMPLEMENTING_BLOCK_CACHE
+        - IMPLEMENTING_LOGGING
+        - TESTING_CRASH_RECOVERY
+        - VALIDATION
+        - COMPLETED
+      file_signatures:
+        - "fs.c"
+        - "log.c"
+        - "bio.c"
+
+# Shadow Workspace (Snapshot-Only - No Git Stash)
+shadow_workspace:
+  root_dir: ".xv6_agent"
+
+  snapshots:
+    enabled: true
+    compression: "zip"
+    max_undo_depth: 5
+    auto_cleanup_days: 7
+
+    triggers:
+      - before_patch: true
+      - low_confidence: 0.6
+      - state_transition: true
+
+  atomic_writes:
+    enabled: true
+    temp_suffix: ".agent_tmp"
+    fsync: true
+
+# Error Recovery
+error_recovery:
+  cpg_fallback: "grep"
+  llm_fallback: "templates"
+  max_retries: 3
+
+  health_check:
+    interval_sec: 60
+    auto_restart_failed_components: true
+
+  degraded_mode:
+    allow_partial_functionality: true
+    notify_user: true
+
+# Performance Monitoring
+performance:
+  monitoring_enabled: true
+  alert_on_threshold_breach: true
+  export_metrics: ".xv6_agent/metrics.json"
+
+  thresholds:
+    cpg_update_ms: 500
+    context_assembly_ms: 200
+    llm_response_sec: 30
+
+  cache:
+    vector_search_results: true
+    cpg_queries: true
+    llm_responses: false
+
+  parallel_processing:
+    cpg_build_workers: 2
+    vector_embed_workers: 4
+
+# Privacy & Security
+privacy:
+  gitignore_agent_dir: true
+  anonymize_logs: false
+
+  llm_privacy:
+    local_only_mode: false
+    minimize_code_context: true
+    anonymize_variable_names: false
+
+  encryption:
+    enabled: false
+    method: "fernet"
+    key_prompt: true
+
+  user_consent:
+    prompt_on_first_api_call: true
+    show_data_being_sent: true
+
+  data_retention:
+    session_logs_days: 30
+    snapshots_days: 7
+    cpg_cache_days: 14
+
+# Logging
+logging:
+  level: "INFO"
+  session_logs: true
+  session_log_dir: ".xv6_agent/logs"
+  log_format: "jsonl"
+
+  components:
+    file_sentinel: "INFO"
+    cpg_builder: "INFO"
+    context_assembler: "DEBUG"
+    llm_calls: "INFO"
+    validator: "INFO"
+    fsm: "INFO"

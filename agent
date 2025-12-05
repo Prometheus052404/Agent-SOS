@@ -1,0 +1,14 @@
+#!/bin/bash
+# Xv6 Agent CLI wrapper
+# This script provides the 'agent' command for the Xv6 teaching assistant
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENT_DIR="${SCRIPT_DIR}/.xv6_agent"
+
+# Check if virtual environment exists
+if [ -d "${SCRIPT_DIR}/.venv" ]; then
+    source "${SCRIPT_DIR}/.venv/bin/activate"
+fi
+
+# Run the CLI
+python3 "${AGENT_DIR}/cli.py" "$@"

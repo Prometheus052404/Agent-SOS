@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xv6-sidecar-agent"
+version = "1.0.0"
+description = "Pedagogical teaching assistant for xv6 operating system labs"
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["xv6", "operating-systems", "teaching", "education"]
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter>=0.20.0",
+    "tree-sitter-c>=0.20.0",
+    "networkx>=3.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "watchdog>=3.0.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "groq>=0.4.0",
+]
+
+[project.scripts]
+xv6-agent = "xv6_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
